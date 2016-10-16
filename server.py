@@ -7,7 +7,7 @@ import shutil
 import time
 from threading import Thread
 from eventlet.green import subprocess
-from flask import Flask, json, Response, request, render_template
+from flask import Flask, json, Response, request, render_template, send_from_directory
 from flask_socketio import SocketIO, emit
 
 import eventlet
@@ -26,6 +26,15 @@ models = []
 for file in os.listdir(folder):
 	if file.endswith('.mzn'):
 		models.append(file)
+
+data = {}
+for m in models:
+  modelData = []
+  dirName = m[:-4]
+  if os.path.exists(folder+"/"+dirName) and os.path.isdir(folder+"/"+dirName):
+    for file in os.listdir(folder+"/"+dirName):
+      modelData.append(file)
+  data[m[:-4]] = modelData
 
 def FindArgs(model):
 	output = [dict(),dict()] #[0] are inputs, [1] are outputs
@@ -89,6 +98,10 @@ def SaveTemplate():
 def Allmodels():
 	return json.jsonify(models)
 
+@app.route('/data/<string:model>')
+def Alldata(model):
+	return json.jsonify(data[model])
+
 @app.route('/models/<string:model>')
 @app.route('/models/<string:model>.mzn')
 @app.route('/models/<string:model>.json')
@@ -98,6 +111,16 @@ def Arguments(model):
 		return json.jsonify(tmpArgs)
 	else:
 		return json.jsonify(error="no model found")
+
+@app.route('/data/<string:model>/<string:dataFile>')
+@app.route('/data/<string:model>/<string:dataFile>.json')
+def Data(model,dataFile):
+	if (model+".mzn" in models) and (dataFile+".json" in data[model]):
+		return send_from_directory("models",model+"/"+dataFile+".json")
+	else:
+		return json.jsonify(error="no model found")
+
+
 
 #REST
 #inputs models musn't 'output'
