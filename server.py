@@ -1,4 +1,7 @@
 #imports
+import eventlet
+eventlet.monkey_patch(all=True)
+
 import pymzn
 import os
 import re
@@ -7,17 +10,16 @@ import shutil
 import time
 from threading import Thread
 from eventlet.green import subprocess
+import subprocess as orig_subprocess
 from flask import Flask, json, Response, request, render_template, send_from_directory
 from flask_socketio import SocketIO, emit
-
-import eventlet
-eventlet.monkey_patch(all=True)
 
 #setup
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 
 #sockets
+#socketio = SocketIO(app, engineio_logger=True, logger=True)
 socketio = SocketIO(app)
 
 #REST
@@ -136,7 +138,7 @@ def Model(model):
 			realPath = directory + "/" + folder + "/" + model+".mzn"
 
 			# TODO: change this into it's separate process / real path.
-			with subprocess.Popen(["minizinc", folder + "/" + model + ".mzn", "-a", "-D", mzn_args],
+			with subprocess.Popen(["mzn-fzn", "-f", "fzn-gecode", "-G", "gecode", folder + "/" + model + ".mzn", "-a", "-D", mzn_args],
 				stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True) as p: #-a outputs all solutions
 				allSolutions = []
 				currentSolution = dict()
@@ -181,6 +183,7 @@ user_dict = dict()
 
 @socketio.on('request_solution')
 def request_solution(data):
+	emit('request_solution_sid',request.sid)
 	mzn_args = ''
 
 	for key in data:
@@ -210,18 +213,21 @@ def request_solution(data):
 		tmpFile.truncate()
 		tmpFile.close()
 
-		with subprocess.Popen(["minizinc", tmpDirName + '/' + data['model']+".mzn", "-a", "-d", tmpFile.name],
-			stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True) as p: #-a outputs all solutions
-			user_dict[request.sid] = p
+		if subprocess.call(["mzn2fzn","-G","gecode",tmpDirName + '/' + data['model']+".mzn", "-d", tmpFile.name], timeout=20)==0:
+			solver_p = orig_subprocess.Popen(["fzn-gecode", "-a", tmpDirName + '/' + data['model']+".fzn"],
+			stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True, close_fds=True) #-a outputs all solutions
+			p = subprocess.Popen(["solns2out", tmpDirName + '/' + data['model']+".ozn"], stdin=solver_p.stdout,
+				stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True, close_fds=True)
+			solver_p.stdout.close()
+
+			user_dict[request.sid] = solver_p
 			currentSolution = dict()
 			markup = ['----------','==========']
 
 			for line in p.stdout:
 				if line.rstrip() in markup: #each new solution is a new JSON object
 					if currentSolution: # If currentSolution is not empty
-						# This isn't actually needed, but oh well :D
-						thread = Thread(target=sendPacket, kwargs=(currentSolution.copy()))
-						thread.start()
+						socketio.emit('solution', currentSolution)
 
 						# THIS DELAY RIGHT HERE...
 						# LITERALLY HOURS SPENT TRYING TO WORK OUT WHY PACKETS AREN'T SENDING...
@@ -239,14 +245,24 @@ def request_solution(data):
 				else:
 					solution = pymzn.parse_dzn(line) #use pymzn to turn output into nice JSON objects
 					currentSolution.update(solution)
+		else:
+			pass
+	socketio.emit('solving_finished')
 
 def sendPacket(**currentSolution):
 	socketio.emit('solution', currentSolution)
 
-@socketio.on('kill_solution')
-def kill_solution():
-	p = user_dict[request.sid]
-	p.kill()
+@app.route('/kill/<string:request_sid>')
+def kill_solution(request_sid):
+	if request_sid in user_dict:
+		p = user_dict[request_sid]
+		p.terminate()
+		p.wait()
+		time.sleep(0.1)
+	else:
+		pass
+	return json.jsonify({})
+	
 
 #run
 if __name__ == '__main__':
