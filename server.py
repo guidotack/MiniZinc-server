@@ -63,7 +63,7 @@ def FindArgs(model):
 def FindArgsProper(model):
 	directory = os.path.dirname(os.path.realpath(__file__))
 	jsonArgs = ''
-	with subprocess.Popen(["mzn2fzn", "--model-interface-only", folder + '/' + model + ".mzn"],
+	with subprocess.Popen(["mzn2fzn", "-Ggecode", "--model-interface-only", folder + '/' + model + ".mzn"],
 		stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True) as p: #-a outputs all solutions
 		for line in p.stdout:
 			jsonArgs += line
@@ -185,9 +185,12 @@ user_dict = dict()
 def request_solution(data):
 	emit('request_solution_sid',request.sid)
 	mzn_args = ''
-
+	fzn_options = []
+	if 'fzn_options' in data:
+		fzn_options = data['fzn_options']['value'].split(" ")
+		print("Fzn options", fzn_options)
 	for key in data:
-		if key != 'model':
+		if key != 'model' and key != 'fzn_options':
 			if 'dim' in data[key]:
 				if data[key]['dim'] == 2:
 					mzn_args += key + "=["
@@ -214,7 +217,7 @@ def request_solution(data):
 		tmpFile.close()
 
 		if subprocess.call(["mzn2fzn","-G","gecode",tmpDirName + '/' + data['model']+".mzn", "-d", tmpFile.name], timeout=20)==0:
-			solver_p = orig_subprocess.Popen(["fzn-gecode", "-a", tmpDirName + '/' + data['model']+".fzn"],
+			solver_p = orig_subprocess.Popen(["fzn-gecode"]+fzn_options+[tmpDirName + '/' + data['model']+".fzn"],
 			stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True, close_fds=True) #-a outputs all solutions
 			p = subprocess.Popen(["solns2out", tmpDirName + '/' + data['model']+".ozn"], stdin=solver_p.stdout,
 				stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True, close_fds=True)
