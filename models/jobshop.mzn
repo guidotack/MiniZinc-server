@@ -33,29 +33,29 @@ array [jobs, tasks] of int: job_task_duration;
 %
 
     % The start time of each job task.
-array [jobs, tasks] of var 0..infinity: job_task_start;
+array [jobs, tasks] of var 0..infinity: job_task_start ::add_to_output;
 
     % The finishing time is the time of the last task to complete.
-var int: t_end;
+var int: t_end ::add_to_output;
 
-% array[int,int] of var int: machine_task_start =
-% array2d(machines,tasks, [ job_task_start[j,t] | m in machines, j in jobs, t in tasks where job_task_machine[j,t]=m ]);
+array[int,int] of var int: machine_task_start =
+  array2d(machines,tasks, [ job_task_start[j,t] | m in machines, j in jobs, t in tasks where job_task_machine[j,t]=m ]);
 
-% array[int,int] of var int: machine_task_duration =
-% array2d(machines,tasks, [ job_task_duration[j,t] | m in machines, j in jobs, t in tasks where job_task_machine[j,t]=m ]);
+array[int,int] of var int: machine_task_duration =
+  array2d(machines,tasks, [ job_task_duration[j,t] | m in machines, j in jobs, t in tasks where job_task_machine[j,t]=m ]);
 
 % constraint trace(show(machine_task_duration));
 
-% array [machines, tasks, tasks] of var bool: precedes;
+array [machines, tasks, tasks] of var bool: precedes;
 
-% constraint forall (m in machines) (
-%   forall (t1,t2 in tasks where t1<t2) (
-%       ( precedes[m,t1,t2] -> machine_task_start[m,t1]+machine_task_duration[m,t1] <= machine_task_start[m,t2] )
-%   /\  ( precedes[m,t1,t2] \/ machine_task_start[m,t2]+machine_task_duration[m,t2] <= machine_task_start[m,t1] )
-%   )
-% /\
-%   forall (t1,t2 in tasks where t1>=t2) (precedes[m,t1,t2])
-% );
+constraint forall (m in machines) (
+  forall (t1,t2 in tasks where t1<t2) (
+      ( precedes[m,t1,t2] -> machine_task_start[m,t1]+machine_task_duration[m,t1] <= machine_task_start[m,t2] )
+  /\  ( precedes[m,t1,t2] \/ machine_task_start[m,t2]+machine_task_duration[m,t2] <= machine_task_start[m,t1] )
+  )
+/\
+  forall (t1,t2 in tasks where t1>=t2) (precedes[m,t1,t2])
+);
 
 %-----------------------------------------------------------------------------%
 % Constraints.
@@ -125,10 +125,10 @@ constraint
 % Objective.
 %
 
-%include "gecode.mzn";
+include "gecode.mzn";
 
 solve
-% ::relax_and_reconstruct(array1d(precedes),90)
+ ::relax_and_reconstruct(array1d(precedes),90)
  ::int_search(array1d(job_task_start), input_order, indomain_min, complete)
 %  ::seq_search([bool_search(array1d(precedes),dom_w_deg,indomain_max,complete),
 %                int_assign(array1d(job_task_start), indomain_min)])
