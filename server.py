@@ -184,7 +184,7 @@ def request_solution(data):
 			else:
 				mzn_args += key + "=" + str(data[key]['value']) + ";"
 
-	if method in FindArgs(data['model']) and FindArgs(data['model'])['method'] != "sat" and not '-a' in fzn_options:
+	if 'method' in FindArgs(data['model']) and FindArgs(data['model'])['method'] != "sat" and not '-a' in fzn_options:
 		fzn_options.append("-a")
 
 	with tempfile.TemporaryDirectory() as tmpDirName:
