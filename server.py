@@ -26,9 +26,16 @@ socketio = SocketIO(app)
 #REST
 folder = 'models' #where the .mzn files are stored
 models = []
+modelArgs = {}
 for file in os.listdir(folder):
 	if file.endswith('.mzn'):
 		models.append(file)
+		jsonArgs = ''
+		with subprocess.Popen(["mzn2fzn", "-Ggecode", "--model-interface-only", folder + '/' + file],
+			stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True) as p: #-a outputs all solutions
+			for line in p.stdout:
+				jsonArgs += line
+			modelArgs[file] = json.loads(jsonArgs)
 
 data = {}
 for m in models:
@@ -40,36 +47,7 @@ for m in models:
   data[m[:-4]] = modelData
 
 def FindArgs(model):
-	output = [dict(),dict()] #[0] are inputs, [1] are outputs
-	file = open(folder + "/" + model + ".mzn")
-	for line in file:
-		line = line.split('%', 1)[0]
-		if re.compile("^.*:.\w+;").match(line):
-			if line.find("var") == -1: #an input
-				tokens = re.compile('\w+').findall(line)
-				if (tokens[0] == 'array'):
-					output[0][tokens[-1]] = 'array(' + tokens[-2] + ')'
-				else:
-					output[0][tokens[-1]] = tokens[-2]
-			else: #an output
-				tokens = re.compile('\w+').findall(line)
-				if (tokens[0] == 'array'):
-					output[1][tokens[-1]] = 'array(' + tokens[-2] + ')'
-				else:
-					output[1][tokens[-1]] = tokens[-2]
-
-
-	return output
-
-def FindArgsProper(model):
-	directory = os.path.dirname(os.path.realpath(__file__))
-	jsonArgs = ''
-	with subprocess.Popen(["mzn2fzn", "-Ggecode", "--model-interface-only", folder + '/' + model + ".mzn"],
-		stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True) as p: #-a outputs all solutions
-		for line in p.stdout:
-			jsonArgs += line
-
-	return json.loads(jsonArgs)
+	return modelArgs[model+".mzn"]
 
 @app.route('/get_template/<string:model>')
 def GetTemplate(model):
@@ -110,7 +88,7 @@ def Alldata(model):
 @app.route('/models/<string:model>.json')
 def Arguments(model):
 	if (model+".mzn" in models):
-		tmpArgs = FindArgsProper(model)
+		tmpArgs = FindArgs(model)
 		return json.jsonify(tmpArgs)
 	else:
 		return json.jsonify(error="no model found")
@@ -205,6 +183,9 @@ def request_solution(data):
 					mzn_args += key + "=" + str(data[key]['value']) + ";"
 			else:
 				mzn_args += key + "=" + str(data[key]['value']) + ";"
+
+	if method in FindArgs(data['model']) and FindArgs(data['model'])['method'] != "sat" and not '-a' in fzn_options:
+		fzn_options.append("-a")
 
 	with tempfile.TemporaryDirectory() as tmpDirName:
 		# Copy model file to temp folder.
