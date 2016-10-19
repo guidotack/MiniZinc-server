@@ -11,6 +11,7 @@ import time
 from threading import Thread
 from eventlet.green import subprocess
 import subprocess as orig_subprocess
+import signal
 from flask import Flask, json, Response, request, render_template, send_from_directory
 from flask_socketio import SocketIO, emit
 
@@ -259,6 +260,8 @@ def sendPacket(**currentSolution):
 def kill_solution(request_sid):
 	if request_sid in user_dict:
 		p = user_dict[request_sid]
+		p.send_signal(signal.SIGINT)
+		time.sleep(0.1)
 		p.terminate()
 		p.wait()
 		time.sleep(0.1)
