@@ -212,7 +212,7 @@ def request_solution(data):
 			for line in p.stdout:
 				if line.rstrip() in markup: #each new solution is a new JSON object
 					if currentSolution: # If currentSolution is not empty
-						socketio.emit('solution', currentSolution)
+						emit('solution', currentSolution)
 
 						# THIS DELAY RIGHT HERE...
 						# LITERALLY HOURS SPENT TRYING TO WORK OUT WHY PACKETS AREN'T SENDING...
@@ -232,10 +232,7 @@ def request_solution(data):
 					currentSolution.update(solution)
 		else:
 			pass
-	socketio.emit('solving_finished')
-
-def sendPacket(**currentSolution):
-	socketio.emit('solution', currentSolution)
+	emit('solving_finished')
 
 @app.route('/kill/<string:request_sid>')
 def kill_solution(request_sid):
